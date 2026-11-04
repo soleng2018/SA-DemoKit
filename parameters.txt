@@ -1,0 +1,91 @@
+################################################################################
+#                         DYNAMIC WAN CONFIGURATION                           #
+################################################################################
+#
+# This file supports dynamic WAN configuration for 1, 2, or 4 uplink interfaces.
+# Configure only the interfaces you need - leave unused ones with empty quotes "".
+#
+# Each uplink requires:
+#   - Interface name (e.g., "eth0", "eno1np0", etc.) - MUST be in double quotes
+#   - Network subnet for OSPF routing (must match IP address subnet mask)
+#
+# IMPORTANT NOTES:
+#   - Make sure interface names match your actual network interfaces
+#   - ALWAYS put interface names in double quotes to prevent parsing errors
+#   - To disable an uplink, set ALL three parameters to empty quotes ""
+#   - Script will validate all parameters before making any changes
+#
+# EXAMPLES:
+#   - Single uplink: Configure uplink1 only, leave others empty
+#   - Dual uplink: Configure uplink1 and uplink2, leave uplink3/4 empty
+#   - Quad uplink: Configure all four uplinks
+#
+################################################################################
+
+# ============================================================================
+#                                UPLINK 1
+# ============================================================================
+uplink1_interface="enp4s0"
+uplink1_lan_ip="172.16.250.1/30"
+uplink1_lan_subnet="172.16.250.0/30"
+
+# ============================================================================
+#                                UPLINK 2  
+# ============================================================================
+uplink2_interface="enp5s0"
+uplink2_lan_ip="192.168.10.9/30"
+uplink2_lan_subnet="192.168.10.0/30"
+
+# ============================================================================
+#                                UPLINK 3
+# ============================================================================
+# Leave empty to disable this uplink
+uplink3_interface=""
+uplink3_lan_ip=""
+uplink3_lan_subnet=""
+
+# ============================================================================
+#                                UPLINK 4
+# ============================================================================  
+# Leave empty to disable this uplink
+uplink4_interface=""
+uplink4_lan_ip=""
+uplink4_lan_subnet=""
+
+################################################################################
+#                              USAGE EXAMPLES                                 #
+################################################################################
+#
+# SINGLE UPLINK EXAMPLE 
+#   uplink1_interface="eth0"
+#   uplink1_lan_ip="172.16.0.1/30"   
+#   uplink1_lan_subnet="172.16.0.0/30" 
+#   uplink2_interface=""
+#   uplink2_lan_ip=""
+#   uplink2_lan_subnet=""
+#   (and so on for uplink3/4)
+#
+# DUAL UPLINK EXAMPLE (mixed subnet sizes):
+#   uplink1_interface="enp2s0"
+#   uplink1_lan_ip="172.16.0.1/30"  
+#   uplink1_lan_subnet="172.16.0.0/30"
+#   uplink2_interface="enp5s0" 
+#   uplink2_lan_ip="172.16.1.1/30"    
+#   uplink2_lan_subnet="172.16.1.0/30"  
+#
+# QUAD UPLINK EXAMPLE (different subnet sizes):
+#   uplink1_interface="eth0"
+#   uplink1_lan_ip="172.16.0.1/30"   
+#   uplink1_lan_subnet="172.16.0.0/30"
+#   uplink2_interface="eth1"
+#   uplink2_lan_ip="172.16.1.1/30"     
+#   uplink2_lan_subnet="172.16.1.0/30"
+#   uplink3_interface="eth2"
+#   uplink3_lan_ip="172.16.10.1/30"     
+#   uplink3_lan_subnet="172.16.10.0/30"
+#   uplink4_interface="eth3"
+#   uplink4_lan_ip="172.16.20.1/30"  
+#   uplink4_lan_subnet="172.16.20./30"
+#
+################################################################################
+
