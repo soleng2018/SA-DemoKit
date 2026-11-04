@@ -12,7 +12,7 @@ On Ubuntu it will:
 
 ## Setup the server
 
-In this section we prep the server, then open the directory that holds this kit.
+In this section we prep the server and check out this kit.
 
 ### Prerequisites
 
@@ -26,37 +26,23 @@ In this section we prep the server, then open the directory that holds this kit.
 ```
 sudo apt-get update
 sudo apt-get install -y git openssh-server
-git clone https://github.com/soleng2018/hol.git
+git clone https://github.com/soleng2018/SA-DemoKit.git
 ```
 
 ### Make all files executable
 
 ```
-cd hol
+cd SA-DemoKit
 sudo chmod +x *
 ```
 
-### Install docker
+`setup.sh`, `cleanup.sh`, and `parameters.txt` are in this directory. Stay here for the steps below. The scripts find `parameters.txt` next to themselves.
 
-If you already have docker installed you can skip this step
+### Install Docker
 
-```
-./installdocker.sh
-```
-
-Select 1 as the option.
-
-`installdocker.sh` is in the hol checkout root. The `cd hol` above is the right directory, and `./installdocker.sh` is how you run it. `setup.sh` still installs `docker.io` later if `docker` is missing or the daemon is not running. Setup always calls `sudo docker`, so you do not need to be in the `docker` group.
+Install Docker if it is not already installed. `setup.sh` installs `docker.io` and starts the daemon when `docker` is missing or not running. Setup always calls `sudo docker`, so you do not need to be in the `docker` group.
 
 ## Setup the uplink
-
-`setup.sh`, `cleanup.sh`, and `parameters.txt` are in `Demo_Kit/dynamic_wan` inside the hol checkout. From the `hol` directory:
-
-```
-cd Demo_Kit/dynamic_wan
-```
-
-Stay in that directory for the steps below. The scripts find `parameters.txt` next to themselves.
 
 ### See the interfaces
 
@@ -119,7 +105,7 @@ On failure after changes have started, setup rolls back the containers, the NAT 
 
 Run cleanup from the **internet** address, not from a demo LAN address. Removing the LAN IP drops an SSH session that came in that way. Cleanup warns when it thinks that is the case. Run it again if a session died halfway.
 
-From `Demo_Kit/dynamic_wan`:
+From this directory:
 
 ```
 sudo ./cleanup.sh
@@ -133,7 +119,7 @@ If the state file is missing, cleanup reads interface names and LAN IPs from `pa
 
 ## Day-to-day
 
-Run these from `Demo_Kit/dynamic_wan`.
+Run these from the `SA-DemoKit` directory.
 
 | Task | How |
 |---|---|
@@ -201,13 +187,13 @@ If a container named `frr_dyn`, `dhcpd_dyn`, or `radiusd_dyn` already exists, se
 
 ## Layout
 
-Inside the hol checkout:
+After `cd SA-DemoKit`:
 
 ```
-installdocker.sh                         hol root (run ./installdocker.sh from here)
-Demo_Kit/dynamic_wan/setup.sh            configure netplan, NAT, and the three containers
-Demo_Kit/dynamic_wan/cleanup.sh          reverse setup.sh
-Demo_Kit/dynamic_wan/parameters.txt      the only file you edit
+setup.sh             configure netplan, NAT, and the three containers
+cleanup.sh           reverse setup.sh
+parameters.txt       the only file you edit
+README.md            this file
 ```
 
 Setup also writes, and cleanup deletes, these files next to the scripts: `daemons`, `frr_dyn.conf`, `dhcpdContainerfile`, `dhcpdStartup.sh`, `dhcpd.conf`, `clients.conf`, `authorize`, `dictionary.nile`, `radiusdContainerfile`.
