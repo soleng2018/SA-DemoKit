@@ -1,10 +1,8 @@
 # SA-DemoKit
 
-This kit configures an uplink for a Nile NSB. An SA can bring the NSB up quickly when the uplink changes, on a Protectli or Raspberry Pi.
+This script sets up an NSB with multiple uplinks, at least 1 and up to 4. An SA can bring the NSB up quickly when the uplink changes, on a Protectli or Raspberry Pi.
 
-`parameters.txt` selects 1–4 LAN interfaces. `setup.sh` applies static addresses (netplan), NATs them out the IPv4 default route, and starts FRR OSPF, ISC DHCP, and FreeRADIUS. `cleanup.sh` removes that. Both scripts prompt before they change the network.
-
-There is no Docker installer in this repo. `setup.sh` installs `docker.io` and starts the daemon if `docker` is missing or not running. If Docker is already up, it uses it.
+`parameters.txt` selects the uplinks. `setup.sh` applies static addresses (netplan), NATs them out the IPv4 default route, and starts FRR OSPF, ISC DHCP, and FreeRADIUS. `cleanup.sh` removes that. Both scripts prompt before they change the network.
 
 ## 1. Update apt
 
@@ -72,7 +70,44 @@ Uplink 2 does not match: `192.168.10.9/30` is not inside `192.168.10.0/30`. Do n
 
 Setup also adds DHCP pools `192.168.18.0/24`–`192.168.21.0/24` and names `.1` as the gateway. It never assigns `192.168.18.1`, `192.168.19.1`, `192.168.20.1`, or `192.168.21.1`.
 
-## 8. Run setup
+## 8. Install docker
+
+If you already have docker installed you can skip this step
+
+```
+./installdocker.sh
+```
+
+## 9. Verify Docker is installed and running
+
+```
+docker run hello-world
+```
+
+```
+Hello from Docker!
+This message shows that your installation appears to be working correctly.
+
+To generate this message, Docker took the following steps:
+ 1. The Docker client contacted the Docker daemon.
+ 2. The Docker daemon pulled the "hello-world" image from the Docker Hub.
+    (amd64)
+ 3. The Docker daemon created a new container from that image which runs the
+    executable that produces the output you are currently reading.
+ 4. The Docker daemon streamed that output to the Docker client, which sent it
+    to your terminal.
+
+To try something more ambitious, you can run an Ubuntu container with:
+ $ docker run -it ubuntu bash
+
+Share images, automate workflows, and more with a free Docker ID:
+ https://hub.docker.com/
+
+For more examples and ideas, visit:
+ https://docs.docker.com/get-started/
+```
+
+## 10. Run setup
 
 ```
 ./setup.sh
@@ -88,7 +123,7 @@ Success is `Setup complete.` Containers: `frr_dyn`, `dhcpd_dyn`, `radiusd_dyn`.
 
 On `ERROR` after changes have started, setup rolls back containers, the NAT unit and script, the netplan drop-in, the runtime addresses it added, and the state file. It does not remove packages or images.
 
-## 9. Clean up
+## 11. Clean up
 
 Run this from the internet address, not from a demo LAN address. Removing the LAN address drops an SSH session that arrived on it. Reconnect on the internet address and run cleanup again if that happens.
 
