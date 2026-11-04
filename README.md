@@ -1,128 +1,63 @@
 # SA-DemoKit
 
-This kit configures an uplink for a Nile NSB (the Nile device this server connects to). An SA can bring the NSB up quickly when the uplink changes, on a Protectli or Raspberry Pi.
+This kit configures an uplink for a Nile NSB. An SA can bring the NSB up quickly when the uplink changes, on a Protectli or Raspberry Pi.
 
-An uplink is the network link from this server to the NSB.
+`parameters.txt` selects 1–4 LAN interfaces. `setup.sh` applies static addresses (netplan), NATs them out the IPv4 default route, and starts FRR OSPF, ISC DHCP, and FreeRADIUS. `cleanup.sh` removes that. Both scripts prompt before they change the network.
 
-In plain words, the kit does three jobs:
+There is no Docker installer in this repo. `setup.sh` installs `docker.io` and starts the daemon if `docker` is missing or not running. If Docker is already up, it uses it.
 
-* It puts a fixed address on each port that faces the NSB. The program that saves those addresses is called netplan.
-* It shares this server’s internet connection with those ports, using the server’s normal way out to the internet (the default route). That sharing is called NAT.
-* It starts three lab programs: a route announcer called FRR OSPF, an address hand-out service called ISC DHCP, and a login checker called FreeRADIUS.
-
-You only edit one file, `parameters.txt`. Then you run `setup.sh`. When you are finished, `cleanup.sh` removes what setup added. Both scripts stop and ask you before they change the network.
-
-Work through the steps in order. Paste one command, wait until it finishes, then go to the next step.
-
-## 1. Open a terminal
-
-A terminal is the window where you type commands. You need it for every step below.
-
-Open the application named Terminal. On a desktop that is usually in the menu under Terminal or System.
-
-You should see a blinking cursor and a line that ends with `$`.
-
-If you cannot find it, use the keyboard and screen attached to the Protectli or Pi, or ask the person who installed the server to open Terminal once.
-
-## 2. Refresh the list of software
-
-This updates Ubuntu’s list of installable software so the next step can find what it needs. `sudo` runs a command as the administrator. It may ask for your password. The password stays blank while you type. Press Enter when you are done.
+## 1. Update apt
 
 ```
 sudo apt-get update
 ```
 
-You should see several lines of text, then a line like `Reading package lists... Done`, then your `$` prompt again.
-
-If it says `Sorry, try again`, retype the password. If it says it cannot connect, or `Temporary failure resolving`, the server has no internet. Plug in Ethernet or join Wi-Fi, then run the command again.
-
-## 3. Install git and OpenSSH
-
-Git is the tool that downloads this kit. OpenSSH lets you log in to this server later from another computer.
+## 2. Install git and OpenSSH
 
 ```
 sudo apt-get install -y git openssh-server
 ```
 
-You should see packages being unpacked, then the `$` prompt, with no line that starts with `E:`.
-
-If it says the packages are already the newest version, that is success. Continue.
-
-## 4. Download the kit
-
-This copies the kit onto the server.
+## 3. Clone the repo
 
 ```
 git clone https://github.com/soleng2018/SA-DemoKit.git
 ```
 
-You should see `Cloning into 'SA-DemoKit'...` and then `done`.
-
-If it says `command not found`, step 3 did not finish. Run that install command again. If it says it cannot resolve the host, the internet connection is down. Fix that and run this command again.
-
-## 5. Go into the kit folder
-
-Every command after this one is typed from inside the kit folder.
+## 4. Enter the repo
 
 ```
 cd SA-DemoKit
 ```
 
-You should see no error. Type `ls` and press Enter. You should see `setup.sh`, `cleanup.sh`, `parameters.txt`, and `README.md`.
+`setup.sh`, `cleanup.sh`, and `parameters.txt` are in this directory. Stay here for the rest.
 
-If it says `No such file or directory`, the download in step 4 did not land in this folder. Run step 4 again, then run `cd SA-DemoKit` again.
-
-## 6. Allow the scripts to run
-
-This marks the kit’s files so the server will run them.
+## 5. Mark scripts executable
 
 ```
 sudo chmod +x *
 ```
 
-You should see no message, then the `$` prompt. No message means it worked.
-
-If it says `No such file or directory`, you are not inside the kit folder. Run step 5 again.
-
-## 7. Let setup install Docker
-
-Docker is a way to run the three lab programs in their own containers, separate from the rest of the server. This kit does not include a separate Docker installer. Do not run one.
-
-When you reach step 10, `setup.sh` installs `docker.io` if Docker is missing, and starts it. If Docker is already installed, `setup.sh` uses that copy.
-
-You should see nothing at this step. That is expected.
-
-## 8. Find the network port names
-
-An interface is the name of one network port, such as a plug on the Protectli or Pi. The setup script only accepts names that exist on this server. This command lists them.
+## 6. Identify interfaces
 
 ```
 ip link show
-```
-
-You should see a list. Each entry looks like `2: enp1s0:`. The name is the word before the colon (`enp1s0` in that example). Your names will be different. Write down the ones that face the NSB.
-
-Then see which port is the internet port:
-
-```
 ip -4 route show default
 ```
 
-You should see a line with the word `dev` followed by a name. That name is the internet port. Do not put it in `parameters.txt`. The script refuses to use the internet port as an NSB uplink.
+Use the ifname from `ip link` in `parameters.txt`. The `dev` on the default route is the internet uplink. Do not put that interface in `parameters.txt`. The script rejects it.
 
-A port can be unplugged and still show up in the list. That is fine.
+NSB-facing interfaces only need to exist. They may be DOWN. If one is UP and the address does not apply, setup fails.
 
-If either command says `not found`, check the spelling, including the spaces. Both commands come with Ubuntu.
+## 7. Edit parameters.txt
 
-## 9. Set the uplink addresses
+For each uplink set `uplinkN_interface`, `uplinkN_lan_ip`, and `uplinkN_lan_subnet` together, in double quotes, or set all three to `""`. A partial uplink is an error. At least one uplink must be set. Use `/30`.
 
-This is the only file you edit. For each uplink you want, fill in all three lines: the port name (`interface`), the address (`lan_ip`), and the network (`lan_subnet`). To turn an uplink off, set all three to empty quotes `""`. One filled line and two empty lines is an error. At least one uplink must be filled in. Put every value in double quotes. Use `/30` on both the address and the network. The script’s DHCP always writes those uplink networks with netmask `255.255.255.252`, which is a `/30`, no matter what you type.
+DHCP always writes those uplink subnets as netmask `255.255.255.252` and ignores any other prefix on `uplinkN_lan_subnet`.
 
-```
-nano parameters.txt
-```
+The file comments say 1, 2, or 4 uplinks. The script accepts 1–4. It checks `x.x.x.x/y` form only. It does not check that the address sits in the subnet or that the two prefixes match.
 
-You should see text, including this sample:
+Replace the sample names and addresses. Shipped values:
 
 ```
 uplink1_interface="enp4s0"
@@ -133,50 +68,34 @@ uplink2_lan_ip="192.168.10.9/30"
 uplink2_lan_subnet="192.168.10.0/30"
 ```
 
-Replace `enp4s0` and `enp5s0` with port names from step 8. Replace the addresses with the ones for this NSB. Uplinks 3 and 4 are already empty. Leave them empty unless you need them.
+Uplink 2 does not match: `192.168.10.9/30` is not inside `192.168.10.0/30`. Do not leave that pair. The quad example in the comments contains `172.16.20./30`. Do not copy it.
 
-The shipped uplink 2 pair does not match. `192.168.10.9/30` is not inside `192.168.10.0/30`. Do not leave that pair as-is.
+Setup also adds DHCP pools `192.168.18.0/24`–`192.168.21.0/24` and names `.1` as the gateway. It never assigns `192.168.18.1`, `192.168.19.1`, `192.168.20.1`, or `192.168.21.1`.
 
-The comment at the bottom of the file has a broken example, `172.16.20./30`. Do not copy that line.
-
-Setup also adds four extra address pools, `192.168.18.0`, `192.168.19.0`, `192.168.20.0`, and `192.168.21.0`. Those pools name `.1` as the gateway. The script never puts those `.1` addresses on any port.
-
-Save and close nano: press Ctrl+O, then Enter, then Ctrl+X.
-
-If `nano` says `command not found`, the file is still `parameters.txt` in this folder. Open it with any text editor, change the same lines, and save.
-
-If a later step says an uplink is incomplete, one of the three lines is empty and another is not. Fill all three, or clear all three.
-
-## 10. Run setup
-
-This puts the fixed addresses on the ports, turns on NAT out the internet port, and starts FRR OSPF, ISC DHCP, and FreeRADIUS.
+## 8. Run setup
 
 ```
 ./setup.sh
 ```
 
-It may ask for your password. That is normal.
+`Proceed anyway? [y/N]:` means a selected interface already has an IPv4 address. `y` replaces it via netplan. `n` exits with no network change.
 
-If it asks `Proceed anyway? [y/N]:`, a port you named already has an address. Type `y` and Enter only if you mean to replace that address. Type `n` and Enter to stop. `n` makes no network change.
+`Continue with setup? [y/N]:` — answer `y`. Anything else stops before netplan, NAT, and containers. Packages installed during the dependency check stay installed.
 
-When it asks `Continue with setup? [y/N]:`, type `y` and Enter. Anything else stops before it changes the network. The letter `y` is required. Pressing Enter alone means no.
+Success is `Setup complete.` Containers: `frr_dyn`, `dhcpd_dyn`, `radiusd_dyn`.
 
-You should see `Setup complete.` and the names `frr_dyn`, `dhcpd_dyn`, and `radiusd_dyn`.
+`netplan apply` can drop the default route briefly. Setup continues if the previous internet interface is still up. It aborts if that interface is down and there is no default route.
 
-If you see `ERROR`, read the reason on that line. Setup tries to undo the network changes it already made. Software it installed, including Docker, stays installed. Fix the reason (often a port name or a missing address) and run `./setup.sh` again.
+On `ERROR` after changes have started, setup rolls back containers, the NAT unit and script, the netplan drop-in, the runtime addresses it added, and the state file. It does not remove packages or images.
 
-## 11. Remove the lab when you are done
+## 9. Clean up
 
-This removes the addresses, the NAT rules, and the three lab programs. Run it while you are connected through the internet port, not through a demo LAN address (an address you set on an NSB-facing port). If your login uses a demo LAN address, this command drops that login.
+Run this from the internet address, not from a demo LAN address. Removing the LAN address drops an SSH session that arrived on it. Reconnect on the internet address and run cleanup again if that happens.
 
 ```
 sudo ./cleanup.sh
 ```
 
-When it asks `Proceed with cleanup? [y/N]:`, type `y` and Enter.
+Answer `y` at `Proceed with cleanup? [y/N]:`.
 
-You should see `Cleanup complete.`
-
-Packages and Docker images stay after cleanup. That is expected. The command does not uninstall them.
-
-If your login drops before the end, reconnect on the internet address, `cd SA-DemoKit`, and run `sudo ./cleanup.sh` again.
+Success is `Cleanup complete.` Packages and Docker images stay.
