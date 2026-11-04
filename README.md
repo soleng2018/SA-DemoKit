@@ -1,83 +1,77 @@
 # SA-DemoKit
 
-This kit helps solution architects use a Protectli or Raspberry Pi as an uplink to Nile NSBs. It stands up a **dynamic WAN** lab on Ubuntu:
+This kit configures an uplink for a Nile NSB. A solution architect can bring the NSB up quickly when the uplink changes, using a Protectli or Raspberry Pi.
 
-* **LAN uplinks (1–4):** static addresses on the interfaces you name in `parameters.txt`.
-* **NAT:** those LANs are masqueraded out the machine’s existing internet uplink (Ethernet or Wi-Fi).
-* **OSPF, DHCP, and RADIUS:** three containers on the host network — FRRouting, ISC DHCP, and FreeRADIUS.
+On Ubuntu it will:
 
-One `parameters.txt` describes the uplinks. `setup.sh` reads that file and configures the host. `cleanup.sh` reverses what setup added. The scripts take no flags. They ask `y/N` before changing the network.
+* Put static addresses on 1 to 4 LAN interfaces with netplan. You name those interfaces in `parameters.txt`.
+* NAT those LANs out the machine’s existing internet uplink (Ethernet or Wi-Fi).
+* Start FRR OSPF, ISC DHCP, and FreeRADIUS in three containers on the host network.
 
-| | |
-|---|---|
-| Setup | [setup.sh](setup.sh) |
-| Cleanup | [cleanup.sh](cleanup.sh) |
-| Parameters | [parameters.txt](parameters.txt) |
-| State (written by setup) | `/etc/dynamicwan_configured_interfaces.conf` |
+`setup.sh` reads `parameters.txt` and configures the host. `cleanup.sh` reverses what setup added. The scripts take no flags. They ask `y/N` before they change the network.
 
----
+## Setup the server
 
-## What you need
+In this section we prep the server, then open the directory that holds this kit.
 
-* **Ubuntu with sudo.** `systemd` and `apt` must work. `/etc/netplan` must already exist; setup will not create it.
-* **An internet uplink that is not a demo LAN.** A default IPv4 route on an interface that is UP. Wired or Wi-Fi both count. Do not put that interface in `parameters.txt`.
-* **The three files in one directory.** The scripts find `parameters.txt` next to themselves.
-* **Outbound network** for `apt` and for Docker image pulls (`ubuntu:latest`, `freeradius/freeradius-server`, `frrouting/frr`).
+### Prerequisites
 
-Setup installs anything else it needs. You do not have to preinstall Docker.
+* Fresh install of an Ubuntu-based system, with sudo
+* `/etc/netplan` already present. Setup will not create it
+* WiFi or wired internet on an interface you will **not** use as the NSB uplink. That interface must be UP
+* Outbound network for `apt` and for the Docker image pulls (`ubuntu:latest`, `freeradius/freeradius-server`, `frrouting/frr`)
 
----
-
-## Bring up the lab
-
-Overview: name the LAN interfaces, run setup once, use the lab, run cleanup from the internet address when you are done.
+### Install git and openssh-server and checkout the scripts
 
 ```
- 1. Ubuntu + sudo     ─┐
- 2. see interfaces     │  once per machine
- 3. clone the kit      │
- 4. parameters.txt    ─┘
- 5. ./setup.sh        → netplan, NAT, frr_dyn, dhcpd_dyn, radiusd_dyn
- 6. use the lab
- 7. sudo ./cleanup.sh → undo setup (packages and Docker images stay)
+sudo apt-get update
+sudo apt-get install -y git openssh-server
+git clone https://github.com/soleng2018/hol.git
 ```
 
-### 1. Install Ubuntu
+### Make all files executable
 
-Install Ubuntu and log in as a user who can `sudo`. Confirm it:
-
-```bash
-sudo -v
+```
+cd hol
+sudo chmod +x *
 ```
 
-### 2. See the interfaces
+### Install docker
 
-Connect the machine to the internet on an interface you will **not** use as a LAN uplink.
+If you already have docker installed you can skip this step
 
-```bash
+```
+./installdocker.sh
+```
+
+Select 1 as the option.
+
+`installdocker.sh` is in the hol checkout root. The `cd hol` above is the right directory, and `./installdocker.sh` is how you run it. `setup.sh` still installs `docker.io` later if `docker` is missing or the daemon is not running. Setup always calls `sudo docker`, so you do not need to be in the `docker` group.
+
+## Setup the uplink
+
+`setup.sh`, `cleanup.sh`, and `parameters.txt` are in `Demo_Kit/dynamic_wan` inside the hol checkout. From the `hol` directory:
+
+```
+cd Demo_Kit/dynamic_wan
+```
+
+Stay in that directory for the steps below. The scripts find `parameters.txt` next to themselves.
+
+### See the interfaces
+
+```
 ip -4 route show default
 ip link show
 ```
 
-The default-route interface must be UP. Each LAN uplink only has to exist; it may be DOWN. If a LAN interface is UP and setup cannot put the address on it, setup fails.
+The default-route interface must be UP, and it must not be listed as a LAN uplink. A LAN uplink only has to exist. It may be DOWN. If a LAN interface is UP and setup cannot put the address on it, setup fails.
 
 A later lookup of `1.1.1.1` is printed during setup. It does not pass or fail the run.
 
-### 3. Get the kit
+### Edit parameters.txt
 
-Get the kit from GitHub before you edit `parameters.txt`. Clone it:
-
-```bash
-git clone https://github.com/soleng2018/SA-DemoKit.git
-cd SA-DemoKit
-chmod +x setup.sh cleanup.sh
-```
-
-Or download the folder from the GitHub page [https://github.com/soleng2018/SA-DemoKit](https://github.com/soleng2018/SA-DemoKit) (Code → Download ZIP), unzip it, and `cd` into that directory. Keep `setup.sh`, `cleanup.sh`, and `parameters.txt` together. The scripts find `parameters.txt` next to themselves.
-
-### 4. Edit parameters.txt
-
-Edit it **before** setup. For each uplink you want, set all three fields, in double quotes. To disable an uplink, set all three to `""`. A partial uplink is an error. At least one uplink must be complete.
+Edit `parameters.txt` before setup. For each uplink you want, set all three fields, in double quotes. To disable an uplink, set all three to `""`. A partial uplink is an error. At least one uplink must be complete.
 
 | Field | What to set |
 |---|---|
@@ -85,13 +79,13 @@ Edit it **before** setup. For each uplink you want, set all three fields, in dou
 | `uplinkN_lan_ip` | Address applied to that interface, `x.x.x.x/prefix`. |
 | `uplinkN_lan_subnet` | OSPF network, `x.x.x.x/prefix`. The address part is also the DHCP subnet. |
 
-The file comments say the LAN subnet must match the LAN IP’s mask. The script only checks that each value looks like `x.x.x.x/y`, and that the three fields are all set or all empty. It does **not** check that the IP is inside the subnet, or that the two prefixes match.
+The file comments say the LAN subnet must match the LAN IP’s mask. The script only checks that each value looks like `x.x.x.x/y`, and that the three fields are all set or all empty. It does not check that the IP is inside the subnet, or that the two prefixes match.
 
 DHCP always writes those uplink subnets as netmask `255.255.255.252` (`/30`) and ignores the prefix on `uplinkN_lan_subnet`. Use `/30` uplink networks unless you change the script.
 
 The header comment says 1, 2, or 4 uplinks. The script accepts 1, 2, 3, or 4.
 
-The copy shipped here is a sample, not this machine:
+The file as shipped is a sample, not your machine:
 
 | Uplink | Interface | LAN IP | LAN subnet |
 |---|---|---|---|
@@ -99,20 +93,19 @@ The copy shipped here is a sample, not this machine:
 | 2 | `enp5s0` | `192.168.10.9/30` | `192.168.10.0/30` |
 | 3, 4 | empty | empty | empty |
 
-Replace the interface names. `192.168.10.9/30` is not inside `192.168.10.0/30`; do not leave that pair as-is. The comment block’s quad example contains `172.16.20./30`, which is not a valid prefix. Do not copy that line.
+Replace the interface names. `192.168.10.9/30` is not inside `192.168.10.0/30`. Do not leave that pair as-is. The comment block’s quad example contains `172.16.20./30`, which is not a valid prefix. Do not copy that line.
 
-### 5. Run setup
+### Run setup
 
-```bash
-cd /home/groot/SA-DemoKit
+```
 ./setup.sh
 ```
 
-Setup calls `sudo` itself and asks for your password if it needs one. It installs missing packages **before** the final confirm prompt. Answer `y` at `Continue with setup? [y/N]:`. Any other answer stops before netplan, NAT, and containers. Packages already installed stay installed.
+Setup calls `sudo` itself. It installs missing packages before the final confirm prompt. Answer `y` at `Continue with setup? [y/N]:`. Any other answer stops before netplan, NAT, and containers. Packages already installed stay installed.
 
 If a chosen LAN interface already has an IPv4 address, setup asks `Proceed anyway? [y/N]:` first. `N` makes no network changes. `Y` continues, and netplan may replace that address.
 
-Installed if missing: `python3`, `python3-yaml`, `iproute2`, `iptables`, `netplan.io`. If Docker is missing or not running: `ca-certificates`, `curl`, `docker.io`, then `systemctl enable --now docker`. Docker is always `sudo docker`, so the user does not need to be in the `docker` group.
+Installed if missing: `python3`, `python3-yaml`, `iproute2`, `iptables`, `netplan.io`. If Docker is missing or not running: `ca-certificates`, `curl`, `docker.io`, then `systemctl enable --now docker`.
 
 Netplan renderer: the `renderer:` line already in `/etc/netplan/*.yaml`, if one is set. Otherwise NetworkManager when that service is active, otherwise `networkd`.
 
@@ -122,33 +115,32 @@ Setup writes only `/etc/netplan/99-dynamicwan-uplinks.yaml` (`dhcp4: false`, `op
 
 On failure after changes have started, setup rolls back the containers, the NAT unit and script, the netplan drop-in, the runtime LAN addresses it added, and the state file. It does not uninstall packages or delete images.
 
-### 6. Clean up
+### Clean up
 
-Run this from the **internet** address, not from a demo LAN address. Removing the LAN IP drops an SSH session that came in that way. Cleanup warns when it thinks that is the case, and it is safe to run again if a session died halfway.
+Run cleanup from the **internet** address, not from a demo LAN address. Removing the LAN IP drops an SSH session that came in that way. Cleanup warns when it thinks that is the case. Run it again if a session died halfway.
 
-`setup.sh` prints this when it finishes:
+From `Demo_Kit/dynamic_wan`:
 
-```bash
-cd /home/groot/SA-DemoKit
+```
 sudo ./cleanup.sh
 ```
 
-`./cleanup.sh` is the same program; it calls `sudo` itself. Answer `y` at `Proceed with cleanup? [y/N]:`.
+`./cleanup.sh` is the same program. It calls `sudo` itself. Answer `y` at `Proceed with cleanup? [y/N]:`.
 
-Cleanup removes the three containers, the iptables rules marked `dynamicwan`, `/usr/local/bin/setup-nat-dynamicwan.sh`, `setup-nat-dynamicwan.service`, the netplan drop-in, the recorded runtime LAN addresses, the generated files in this directory, and the state file. If setup turned forwarding on, cleanup restores the old value and deletes the `net.ipv4.ip_forward=1` line it added to `/etc/sysctl.conf`. **Packages and Docker images stay.**
+Cleanup removes the three containers, the iptables rules marked `dynamicwan`, `/usr/local/bin/setup-nat-dynamicwan.sh`, `setup-nat-dynamicwan.service`, the netplan drop-in, the recorded runtime LAN addresses, the generated files in this directory, and the state file. If setup turned forwarding on, cleanup restores the old value and deletes the `net.ipv4.ip_forward=1` line it added to `/etc/sysctl.conf`. Packages and Docker images stay.
 
 If the state file is missing, cleanup reads interface names and LAN IPs from `parameters.txt` and still deletes the known demo artifacts. It only deletes a netplan file whose path contains `dynamicwan`.
 
----
-
 ## Day-to-day
+
+Run these from `Demo_Kit/dynamic_wan`.
 
 | Task | How |
 |---|---|
 | Change an uplink address or interface | Edit `parameters.txt`, then `./setup.sh` again. It rewrites its netplan drop-in, NAT unit, and the three containers. |
 | Turn an uplink off | Set `uplinkN_interface`, `uplinkN_lan_ip`, and `uplinkN_lan_subnet` all to `""`, then run setup again. |
 | Undo the lab | `sudo ./cleanup.sh`, from the internet address. |
-| Cleanup stopped halfway | Reconnect on the internet/Wi-Fi address and run `./cleanup.sh` again. |
+| Cleanup stopped halfway | Reconnect on the internet or Wi-Fi address and run `./cleanup.sh` again. |
 
 There is no separate verify command. Setup’s last step checks that `frr_dyn`, `dhcpd_dyn`, and `radiusd_dyn` are running, and that each UP LAN interface has its address.
 
@@ -163,8 +155,6 @@ sudo ./cleanup.sh
 |---|---|
 | `./setup.sh` | Parse `parameters.txt`, install missing packages, configure netplan and NAT, build or pull images, start the three containers. Asks before it changes the network. On failure, rolls back its own changes. |
 | `sudo ./cleanup.sh` | Stop and remove what `setup.sh` added. Keeps apt packages and Docker images. Asks before it starts. Safe to re-run. |
-
-Both scripts call `sudo` themselves. Run them as your user, from the directory that holds `parameters.txt`, or by full path.
 
 ## What gets created
 
@@ -184,7 +174,7 @@ Generated next to the scripts, and deleted by cleanup: `daemons`, `frr_dyn.conf`
 
 **FRR.** Zebra and OSPFd only. Router-id `1.1.1.1`. Each LAN interface is `ip ospf network point-to-point`. Each `uplinkN_lan_subnet` is `network … area 0`. `default-information originate always`.
 
-**DHCP.** Listens on the LAN interfaces you configured. Each of those subnets is declared with netmask `255.255.255.252` and **no address pool**. It also always adds pools `192.168.18.0/24`, `192.168.19.0/24`, `192.168.20.0/24`, and `192.168.21.0/24` (`.11`–`.254`, DNS `8.8.8.8`, domain `dynamicwan.local`). Those pools name `.1` as the gateway. The script never assigns `192.168.18.1`, `192.168.19.1`, `192.168.20.1`, or `192.168.21.1` on any interface.
+**DHCP.** Listens on the LAN interfaces you configured. Each of those subnets is declared with netmask `255.255.255.252` and no address pool. It also always adds pools `192.168.18.0/24`, `192.168.19.0/24`, `192.168.20.0/24`, and `192.168.21.0/24` (`.11`–`.254`, DNS `8.8.8.8`, domain `dynamicwan.local`). Those pools name `.1` as the gateway. The script never assigns `192.168.18.1`, `192.168.19.1`, `192.168.20.1`, or `192.168.21.1` on any interface.
 
 **RADIUS.** Clients `127.0.0.1`, `172.16.0.0/16`, `192.168.0.0/16`, and `10.0.0.0/8`, shared secret `nile123`. Users: `bob` / `hello`; `employee` / `nilesecure` (netseg Employee); `contractor` / `nilesecure` (netseg contractor); `sally@nilenetworks.com` / `nilesecure` (netseg corporate); `harry-ext@nilenetworks.com` / `nilesecure` (netseg contractor). Vendor dictionary: Nile, id 58313.
 
@@ -197,37 +187,32 @@ If a container named `frr_dyn`, `dhcpd_dyn`, or `radiusd_dyn` already exists, se
 | `sudo privileges required` | Run as a user who can `sudo`. |
 | `No active uplinks` / `Uplink N incomplete` | Set interface, `lan_ip`, and `lan_subnet` together, or clear all three. |
 | `Malformed line` or `invalid lan_ip` | Keep the value in double quotes, shaped like `x.x.x.x/y`. |
-| `interface does not exist` | Name from `ip link show`, not a wish. |
+| `interface does not exist` | Use a name from `ip link show`. |
 | `No default route` / internet uplink `is not UP` | Connect Ethernet or Wi-Fi first. The internet NIC must be up. |
 | Interface `is the server internet uplink` | Pick a different NIC in `parameters.txt`. |
 | `netplan apply failed` | Read the debug output setup prints. Other netplan files were not edited. |
 | LAN IP missing on an UP interface | NetworkManager may own that NIC. A DOWN interface is allowed to come up later. |
-| `Internet uplink lost after netplan apply` | Wi-Fi/NetworkManager dropped the default route and the old NIC is no longer UP. |
-| `/etc/netplan does not exist` | This is not a netplan Ubuntu. Setup will not create that directory. |
+| `Internet uplink lost after netplan apply` | Wi-Fi or NetworkManager dropped the default route and the old NIC is no longer UP. |
+| `/etc/netplan does not exist` | This Ubuntu install has no netplan directory. Setup will not create it. |
 | `Docker installed but daemon is not running` | `sudo systemctl enable --now docker`, then run setup again. |
 | Container `is not running after start` | `sudo docker ps` and `sudo docker logs frr_dyn` (or `dhcpd_dyn`, `radiusd_dyn`). |
 | SSH dies during cleanup | You were on a demo LAN address. Reconnect via the internet uplink and run `./cleanup.sh` again. |
 | Cleanup left packages or images behind | That is what it does. It does not run `apt remove` or `docker rmi`. |
 
-## Repository layout
+## Layout
+
+Inside the hol checkout:
 
 ```
-README.md            this file
-setup.sh             configure netplan, NAT, and the three containers
-cleanup.sh           reverse setup.sh
-parameters.txt       the only file you edit
-daemons              FRR daemon list          (generated, removed by cleanup)
-frr_dyn.conf         FRR OSPF config          (generated, removed by cleanup)
-dhcpdContainerfile   DHCP image build         (generated, removed by cleanup)
-dhcpdStartup.sh      DHCP start script        (generated, removed by cleanup)
-dhcpd.conf           DHCP config              (generated, removed by cleanup)
-clients.conf         RADIUS clients           (generated, removed by cleanup)
-authorize            RADIUS users             (generated, removed by cleanup)
-dictionary.nile      RADIUS vendor dictionary (generated, removed by cleanup)
-radiusdContainerfile RADIUS image build       (generated, removed by cleanup)
+installdocker.sh                         hol root (run ./installdocker.sh from here)
+Demo_Kit/dynamic_wan/setup.sh            configure netplan, NAT, and the three containers
+Demo_Kit/dynamic_wan/cleanup.sh          reverse setup.sh
+Demo_Kit/dynamic_wan/parameters.txt      the only file you edit
 ```
 
-Host files outside this directory: `/etc/netplan/99-dynamicwan-uplinks.yaml`, `/etc/dynamicwan_configured_interfaces.conf`, `/usr/local/bin/setup-nat-dynamicwan.sh`, `/etc/systemd/system/setup-nat-dynamicwan.service`.
+Setup also writes, and cleanup deletes, these files next to the scripts: `daemons`, `frr_dyn.conf`, `dhcpdContainerfile`, `dhcpdStartup.sh`, `dhcpd.conf`, `clients.conf`, `authorize`, `dictionary.nile`, `radiusdContainerfile`.
+
+Host files outside that directory: `/etc/netplan/99-dynamicwan-uplinks.yaml`, `/etc/dynamicwan_configured_interfaces.conf`, `/usr/local/bin/setup-nat-dynamicwan.sh`, `/etc/systemd/system/setup-nat-dynamicwan.service`.
 
 ## Security
 
