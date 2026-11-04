@@ -1,8 +1,6 @@
 # SA-DemoKit
 
-This script sets up an NSB with multiple uplinks, at least 1 and up to 4. An SA can bring the NSB up quickly when the uplink changes, on a Protectli or Raspberry Pi.
-
-`parameters.txt` selects the uplinks. `setup.sh` applies static addresses (netplan), NATs them out the IPv4 default route, and starts FRR OSPF, ISC DHCP, and FreeRADIUS. `cleanup.sh` removes that. Both scripts prompt before they change the network.
+This script helps bring up the NSB with multiple uplinks. Enter the router IP address for each interface in `parameters.txt`; the script does the rest. It assigns the static addresses on those interfaces, NATs them out the IPv4 default route, and starts FRR OSPF, ISC DHCP, and FreeRADIUS. `cleanup.sh` removes that. Both scripts prompt before they change the network. An SA can bring the NSB up quickly when the uplink changes, on a Protectli or Raspberry Pi.
 
 ## 1. Update apt
 
@@ -49,7 +47,15 @@ NSB-facing interfaces only need to exist. They may be DOWN. If one is UP and the
 
 ## 7. Edit parameters.txt
 
-For each uplink set `uplinkN_interface`, `uplinkN_lan_ip`, and `uplinkN_lan_subnet` together, in double quotes, or set all three to `""`. A partial uplink is an error. At least one uplink must be set. Use `/30`.
+This file supports dynamic WAN configuration for 1, 2, or 4 uplink interfaces. Configure only the interfaces you need; leave unused ones as empty quotes `""`.
+
+Each uplink needs an interface name in double quotes (`eth0`, `eno1np0`, and so on) and a network subnet for OSPF that matches the IP address subnet mask.
+
+Interface names must match the real interfaces. Always quote them. To disable an uplink, set all three parameters to `""`. The script validates parameters before it changes anything.
+
+Examples: one uplink (`uplink1` only), two uplinks (`uplink1` and `uplink2`), four uplinks (all four).
+
+For each uplink set `uplinkN_interface`, `uplinkN_lan_ip`, and `uplinkN_lan_subnet` together, or set all three to `""`. A partial uplink is an error. At least one uplink must be set. Use `/30`.
 
 DHCP always writes those uplink subnets as netmask `255.255.255.252` and ignores any other prefix on `uplinkN_lan_subnet`.
 
@@ -118,6 +124,19 @@ For more examples and ideas, visit:
 `Continue with setup? [y/N]:` — answer `y`. Anything else stops before netplan, NAT, and containers. Packages installed during the dependency check stay installed.
 
 Success is `Setup complete.` Containers: `frr_dyn`, `dhcpd_dyn`, `radiusd_dyn`.
+
+Checks `setup.sh` actually runs:
+
+* `parse_parameters` — dies if `parameters.txt` is missing, a quote is unclosed, an uplink is only partly filled, `lan_ip` or `lan_subnet` is not `x.x.x.x/y`, or no uplink is active. It does not check that the address is inside the subnet or that the masks match.
+* `check_dependencies` — dies without sudo, if `/etc/netplan` is missing, or if a required command is still absent after install. `ensure_docker` dies if the daemon is not running after it installs `docker.io`.
+* `preflight_checks` / `iface_exists` — dies if a named LAN interface does not exist.
+* `preflight_checks` / `iface_is_up` — a DOWN LAN interface does not fail the run.
+* `prompt_existing_lan_ips` — if a LAN interface already has an IPv4 address, asks `Proceed anyway?`. `n` exits before any network change. That prompt does not roll back; nothing has been applied yet.
+* `detect_internet_iface` — picks the lowest-metric IPv4 default route, or else the device from `ip -4 route get 1.1.1.1`. `preflight_checks` dies if that interface is missing, not UP, or is also listed as a LAN uplink.
+* `preflight_checks` — the `1.1.1.1` route lookup is advisory and does not fail setup.
+* `configure_netplan` — dies if `netplan apply` fails. If the new address is missing and the interface is UP, it dies; if the interface is DOWN, it continues. It then calls `detect_internet_iface` up to 6 times. It dies only when there is still no default route and the previous internet interface is not UP, or if that interface then matches a LAN interface.
+* `rollback_changes` — on a failed command after changes have started, removes `frr_dyn`, `dhcpd_dyn`, and `radiusd_dyn`, the NAT unit and script, the netplan drop-in, the runtime LAN addresses it added, and the state file.
+* `postflight` — dies if one of those containers is not running, if an UP LAN interface lacks its address, or if `detect_internet_iface` finds no default route.
 
 `netplan apply` can drop the default route briefly. Setup continues if the previous internet interface is still up. It aborts if that interface is down and there is no default route.
 
