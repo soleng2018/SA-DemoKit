@@ -2,7 +2,7 @@
 
 This script brings up the NSB with 1, 2, or 4 uplinks. Enter each NSB-facing interface in `parameters.txt`. The script assigns the static addresses, NATs them out the IPv4 default route, and starts FRR OSPF, ISC DHCP, and FreeRADIUS. `cleanup.sh` removes that configuration. Both scripts ask before they change the network.
 
-An SA can bring the NSB up on a Protectli or Raspberry Pi when the uplink changes.
+This script helps bring a Nile NSB up on a Protectli that is already connected to the internet over broadband or Wi-Fi. During a customer or partner demo, or while deploying and activating an NSB, the NSB may stay down because of a firewall rule, a missing path to the internet, or a routing problem. Updating the uplink interfaces to match that customer or demo network brings the NSB up quickly. Matching the uplink also helps narrow down whether the problem is a firewall rule or routing.
 
 ## Prerequisites
 
