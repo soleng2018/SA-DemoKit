@@ -178,6 +178,22 @@ Setup does the following:
 * NATs those networks out the IPv4 default route
 * Starts `frr_dyn`, `dhcpd_dyn`, and `radiusd_dyn`
 
+`frr_dyn` is the FRR container. Setup starts OSPF in that container for every uplink listed in `parameters.txt`, so you do not write a routing configuration.
+
+Each active uplink is set as an OSPF point-to-point network, and its subnet is advertised in OSPF area 0. The container also originates a default route, so the NSB learns the path to the internet through OSPF. Change the uplinks in `parameters.txt` and run setup again, and OSPF follows those subnets.
+
+`dhcpd_dyn` is the ISC DHCP server. It listens on each active uplink interface, at the `uplinkN_lan_ip` address from `parameters.txt`. With the shipped sample, that is `172.16.250.1` on `enp4s0` and `192.168.10.1` on `enp5s0`. Each uplink subnet is declared with netmask `255.255.255.252`. The lab pools `192.168.18.0/24` through `192.168.21.0/24` are included, starting at `.11` and naming `.1` as the gateway. You do not write a DHCP configuration.
+
+`radiusd_dyn` is the FreeRADIUS server. It uses the same host addresses, so point the NSB at the uplink LAN address. Authentication is UDP `1812`, accounting is UDP `1813`, and the client secret is `nile123`. These demo accounts are already loaded:
+
+* Username `bob`, password `hello`
+* Username `employee`, password `nilesecure`, netseg `Employee`
+* Username `contractor`, password `nilesecure`, netseg `contractor`
+* Username `sally@nilenetworks.com`, password `nilesecure`, netseg `corporate`
+* Username `harry-ext@nilenetworks.com`, password `nilesecure`, netseg `contractor`
+
+To verify the RADIUS server in the Nile portal, use username `bob` and password `hello`.
+
 Setup stops before it changes the network when `parameters.txt` is missing, a quote is unclosed, an uplink is only partly filled, an address is not `x.x.x.x/y`, no uplink is set, a named interface does not exist, sudo is unavailable, `/etc/netplan` is missing, or the internet uplink is down or listed as an NSB interface. It checks the `x.x.x.x/y` form only. It does not check that the address sits inside the subnet.
 
 `netplan apply` can drop the default route for a moment. Setup continues when the previous internet interface is still up. If setup hits an error after changes have started, it removes the three containers, the NAT unit and script, the netplan drop-in, the addresses it added, and the state file. Installed packages and Docker images stay.
